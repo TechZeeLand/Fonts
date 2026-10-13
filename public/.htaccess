@@ -1,0 +1,13 @@
+# Used when running on plain Apache (the Docker image configures the same thing in its vhost).
+Options -Indexes
+<IfModule mod_dir.c>
+    FallbackResource /index.php
+</IfModule>
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|svg|png|ico|woff2|webmanifest)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>

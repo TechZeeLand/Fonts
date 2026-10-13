@@ -1,0 +1,24 @@
+name: ci
+on: { push: { branches: [main] }, pull_request: {} }
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: "8.3" }
+      - run: for f in $(find src public views bin resources/tools -name '*.php'); do php -l "$f" || exit 1; done
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node --check public/assets/js/app.js && node --check public/assets/js/admin.js && node --check resources/tools/tzl-fonts.mjs
+  publish:
+    needs: lint
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/build-push-action@v6
+        with: { context: ., push: true, tags: "ghcr.io/techzeeland/tzl-fonts:latest" }

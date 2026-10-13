@@ -1,0 +1,6 @@
+# runtime data (fonts, settings, sessions, stats)
+/data/*
+!/data/.gitkeep
+.env
+.DS_Store
+*.log

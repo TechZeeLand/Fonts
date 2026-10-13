@@ -1,0 +1,16 @@
+services:
+  tzl-fonts:
+    build: .
+    container_name: tzl-fonts
+    ports: ["1027:80"]
+    restart: unless-stopped
+    environment:
+      # Public URL of your instance (used in generated CSS and embed code). Can also be set in Admin > Settings.
+      TZL_BASE_URL: "${TZL_BASE_URL:-}"
+      # Optional: choose the first admin account. If the password is empty a random one is printed in the log.
+      TZL_ADMIN_USER: "${TZL_ADMIN_USER:-admin}"
+      TZL_ADMIN_PASSWORD: "${TZL_ADMIN_PASSWORD:-}"
+      # Set to 1 when a reverse proxy (Nginx, Caddy, Traefik, Cloudflare) terminates HTTPS in front of this container.
+      TZL_TRUST_PROXY: "${TZL_TRUST_PROXY:-0}"
+    volumes:
+      - ./data:/var/www/html/data   # fonts, settings, stats: back this folder up

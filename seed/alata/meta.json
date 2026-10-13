@@ -1,0 +1,48 @@
+{
+  "slug": "alata",
+  "family": "Alata",
+  "category": "sans-serif",
+  "designer": "Spyros Zevelakis, Eben Sorkin",
+  "license": "OFL-1.1",
+  "license_url": "https://openfontlicense.org",
+  "copyright": "Copyright 2019 The Alata Project Authors (https://github.com/SorkinType/Alata)",
+  "source_url": "https://github.com/SorkinType/Alata",
+  "description": "Alata is a geometric sans-serif with friendly, open shapes and a confident, slightly condensed rhythm. It works well for headings, UI and short passages of text, and it is the typeface that TZL Fonts itself is set in.",
+  "tags": [
+    "geometric",
+    "friendly",
+    "ui",
+    "headings"
+  ],
+  "subsets": [
+    "latin",
+    "latin-ext",
+    "vietnamese"
+  ],
+  "variable": false,
+  "axes": [],
+  "glyphs": 1036,
+  "font_version": "Version 1.005",
+  "featured": true,
+  "published": true,
+  "styles": [
+    {
+      "weight": 400,
+      "italic": false,
+      "variable": false,
+      "name": "Regular",
+      "files": {
+        "woff2": {
+          "name": "Alata-Regular.woff2",
+          "size": 98536,
+          "sha1": "1ec1a48e7c917bb3c44c78d8c5cc32d706442b5a"
+        },
+        "ttf": {
+          "name": "Alata-Regular.ttf",
+          "size": 348308,
+          "sha1": "05f7d2017cc9baf92e8aaf8d3ab77f9ba2911af2"
+        }
+      }
+    }
+  ]
+}
