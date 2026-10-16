@@ -39,12 +39,6 @@ final class Web
         View::error(404, 'signpost', "This page doesn't exist", 'The link might be broken, or the page may have been moved or removed.');
     }
 
-    public static function errorPage(string $code): void
-    {
-        if ($code === '403') { View::error(403, 'lock', 'Access denied', "You don't have permission to view this page."); }
-        View::error(500, 'alert-triangle', 'Something went wrong', 'The server hit an unexpected problem. Please try again in a moment.');
-    }
-
     /* ---------- plain-response helper for machine endpoints ---------- */
 
     private static function plain(int $status, string $msg, string $type = 'text/plain'): void
@@ -236,28 +230,19 @@ final class Web
 
     /* ---------- misc ---------- */
 
-    public static function robots(): void
+    public static function register(): void
     {
-        header('Content-Type: text/plain; charset=utf-8');
-        if (!Store::setting('robots_index')) { echo "User-agent: *\nDisallow: /\n"; exit; }
-        echo "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /download/\n\nSitemap: " . App::url('/sitemap.xml') . "\n";
-        exit;
-    }
-
-    public static function sitemap(): void
-    {
-        header('Content-Type: application/xml; charset=utf-8');
-        $urls = ['/', '/docs', '/about', '/contribute', '/contact', '/privacy-policy', '/terms-and-conditions', '/cookie-policy', '/license-policy'];
-        foreach (Store::fonts(true) as $f) { $urls[] = '/font/' . $f['slug']; }
-        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-        foreach ($urls as $u) { echo '  <url><loc>' . App::e(App::url($u)) . "</loc></url>\n"; }
-        echo '</urlset>';
-        exit;
-    }
-
-    public static function health(): void
-    {
-        header('Cache-Control: no-store');
-        App::json(['ok' => true, 'version' => App::VERSION, 'fonts' => count(Store::fonts(true)), 'manifest' => Store::version(), 'time' => App::now()], 200, false);
+        $g = static fn(string $re, string $m) => \Tzl\Router::get($re, [self::class, $m]);
+        $g('#^/$#', 'home');
+        $g('#^/font/([a-z0-9-]+)$#', 'font');
+        $g('#^/(docs|contribute|license-policy)$#', 'page');
+        $g('#^/docs\.md$#', 'docsMarkdown');
+        $g('#^/css2?$#', 'css');
+        $g('#^/f/([a-z0-9-]+)/([^/]+)$#', 'file');
+        $g('#^/api/fonts\.json$#', 'apiFonts');
+        $g('#^/api/fonts/([a-z0-9-]+)\.json$#', 'apiFont');
+        $g('#^/api/manifest\.json$#', 'apiManifest');
+        $g('#^/download/([a-z0-9-]+)\.zip$#', 'zip');
+        $g('#^/download/tools/([a-z0-9.-]+)$#', 'tool');
     }
 }

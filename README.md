@@ -46,7 +46,7 @@ Pre-built image (after pushing to GitHub, see `.github/workflows`): `ghcr.io/tec
 | `TZL_ADMIN_PASSWORD` | random | First admin password; if empty a random one is printed to the log once |
 | `TZL_TRUST_PROXY` | `0` | Set `1` behind a reverse proxy that terminates HTTPS (trusts `X-Forwarded-*`) |
 | `TZL_DATA_DIR` | `./data` | Where fonts, settings and stats live |
-| `TZL_ICON_CSS` | `https://icons.rayaz.org/zi.css` | Icon stylesheet (also used to build the CSP) |
+| `TZL_ROOT_DOMAIN` | `rayaz.org` | Root domain of all TechZeeLand services; icons and fonts load from `icons.<root>` and `fonts.<root>` |
 
 Everything else (site name, caching times, CORS origin, announcement bar, upload limit…) is in **Admin → Settings**.
 
@@ -148,3 +148,14 @@ Only add fonts you have the right to redistribute under a license that allows fr
 Software: [GNU AGPL-3.0](LICENSE). If you run a modified version as a network service, offer its source to your users. Fonts keep their own licenses (shown on each font page and included in every download). Alata is © The Alata Project Authors, SIL Open Font License 1.1.
 
 Made by [TechZeeLand](https://github.com/TechZeeLand) · azlanaziz@rayaz.org
+
+
+## 2.0: shared TZL Kit
+The site shell, admin portal, settings, statistics and monitoring now come from the shared TZL Kit (`src/Tzl/`), identical in every TechZeeLand PHP service. New admin sections: Site & domains, Header & footer, Appearance, Pages & policies, SEO/ads/code, Traffic, System & backup, Security. Font-specific screens: Fonts, Add font, Delivery & caching.
+
+
+## Check a deployment
+```bash
+docker compose exec tzl-fonts php bin/selftest.php
+```
+Lints every PHP file and requests the key pages; every line should say `ok`. The shared code in `src/Tzl/` comes from the separate TZL Kit repo (see its GUIDE.md); do not edit it here.

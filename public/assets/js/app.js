@@ -4,60 +4,6 @@
     var $ = function (s, r) { return (r || document).querySelector(s); };
     var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-    /* ---------- clipboard ---------- */
-    function copyText(text) {
-        if (navigator.clipboard && window.isSecureContext) {
-            return navigator.clipboard.writeText(text);
-        }
-        return new Promise(function (resolve, reject) {
-            var ta = document.createElement('textarea');
-            ta.value = text; ta.setAttribute('readonly', '');
-            ta.style.position = 'fixed'; ta.style.opacity = '0';
-            document.body.appendChild(ta); ta.select();
-            try { document.execCommand('copy') ? resolve() : reject(); } catch (e) { reject(e); }
-            document.body.removeChild(ta);
-        });
-    }
-
-    function addCopyButtons() {
-        $$('.code-block').forEach(function (block) {
-            if ($('.copy-btn', block)) { return; }
-            var btn = document.createElement('button');
-            btn.type = 'button'; btn.className = 'copy-btn';
-            btn.innerHTML = '<i class="zi zi-copy" aria-hidden="true"></i><span>Copy</span>';
-            btn.addEventListener('click', function () {
-                var code = $('code', block);
-                copyText(code ? code.textContent : '').then(function () {
-                    var label = $('span', btn), icon = $('i', btn);
-                    btn.classList.add('is-done'); label.textContent = 'Copied'; icon.className = 'zi zi-check';
-                    setTimeout(function () { btn.classList.remove('is-done'); label.textContent = 'Copy'; icon.className = 'zi zi-copy'; }, 1600);
-                });
-            });
-            block.appendChild(btn);
-        });
-    }
-
-    var urlBtn = $('[data-copy-url]');
-    if (urlBtn) {
-        urlBtn.addEventListener('click', function () {
-            var orig = urlBtn.innerHTML;
-            copyText(location.href.split('#')[0]).then(function () {
-                urlBtn.innerHTML = '<i class="zi zi-check" aria-hidden="true"></i> Link copied';
-                setTimeout(function () { urlBtn.innerHTML = orig; }, 1600);
-            });
-        });
-    }
-
-    /* ---------- mobile menu ---------- */
-    var menuBtn = $('#menu-toggle'), nav = $('#main-nav');
-    if (menuBtn && nav) {
-        menuBtn.addEventListener('click', function () {
-            var open = nav.classList.toggle('is-open');
-            menuBtn.setAttribute('aria-expanded', String(open));
-        });
-        $$('a', nav).forEach(function (a) { a.addEventListener('click', function () { nav.classList.remove('is-open'); menuBtn.setAttribute('aria-expanded', 'false'); }); });
-    }
-
     /* ---------- font stylesheet loader (shared) ---------- */
     var loaded = {};
     function loadCss(href) {
@@ -216,5 +162,4 @@
         }
     }
 
-    addCopyButtons();
 })();

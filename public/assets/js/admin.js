@@ -4,21 +4,6 @@
     var $ = function (s, r) { return (r || document).querySelector(s); };
     var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-    // confirm dialogs for destructive buttons/forms
-    document.addEventListener('click', function (e) {
-        var el = e.target.closest ? e.target.closest('[data-confirm]') : null;
-        if (el && !window.confirm(el.getAttribute('data-confirm'))) { e.preventDefault(); }
-    });
-
-    // mobile admin menu
-    var mb = $('#admin-menu-toggle'), nav = $('#admin-nav');
-    if (mb && nav) {
-        mb.addEventListener('click', function () {
-            var open = nav.classList.toggle('is-open');
-            mb.setAttribute('aria-expanded', String(open));
-        });
-    }
-
     // live filter on the fonts table
     var filter = $('#admin-filter');
     if (filter) {
