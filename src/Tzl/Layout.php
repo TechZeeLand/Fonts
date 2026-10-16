@@ -83,6 +83,10 @@ final class Layout
                 $h = trim((string)Site::get($key));
                 if ($h !== '' && !$admin) { $csp[$dir] = (isset($csp[$dir]) ? $csp[$dir] . ' ' : '') . preg_replace('/[^a-zA-Z0-9:\/\.\-\*\s]/', '', $h); }
             }
+            $hook = Kit::cfg('csp_extra', null);
+            if (is_callable($hook) && !$admin) {
+                foreach ((array)$hook() as $dir => $val) { $csp[$dir] = (isset($csp[$dir]) ? $csp[$dir] . ' ' : '') . $val; }
+            }
             if (Site::on('csp_allow_inline') && !$admin) { $csp['script-src'] = (isset($csp['script-src']) ? $csp['script-src'] . ' ' : '') . "'unsafe-inline'"; }
             Kit::securityHeaders($csp);
         }
@@ -137,6 +141,8 @@ final class Layout
         } elseif (Site::on('show_github') && Site::get('github_url') !== '') {
             echo '<a class="gh-link" href="' . self::e(Site::get('github_url')) . '" target="_blank" rel="noopener">' . Kit::icon('github') . '<span>' . self::e(Site::get('github_label')) . '</span></a>';
         }
+        $hx = Kit::cfg('header_extra', null);
+        if (!$admin && is_callable($hx)) { echo (string)$hx(); }
         if (Site::on('show_services')) { echo self::servicesMenu(); }
         echo '<button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false" aria-label="Switch to dark mode" title="Switch theme">' . Kit::icon('sun', 'ico-sun') . Kit::icon('moon', 'ico-moon') . '</button>';
         echo '<button type="button" class="menu-toggle" id="' . ($admin ? 'admin-menu-toggle' : 'menu-toggle') . '" aria-expanded="false" aria-controls="' . ($admin ? 'admin-nav' : 'main-nav') . '" aria-label="Open menu">' . Kit::icon('menu') . '</button>';
@@ -169,6 +175,8 @@ final class Layout
         $admin = !empty($opts['admin']);
         $site = self::e(Site::get('site_name'));
         if (!$admin) {
+            $bf = Kit::cfg('before_footer', null);
+            if (is_callable($bf)) { echo (string)$bf(); }
             echo '<footer class="site-footer"><div class="footer-inner"><div class="footer-cols">';
             echo '<div class="footer-col footer-about"><a class="brand-link" href="/"><img class="brand-logo" src="' . self::e(self::logoUrl()) . '" alt="" width="30" height="30"><span>' . $site . '</span></a><p>' . self::e(Site::get('tagline')) . '</p></div>';
             foreach (Site::footerColumns() as $col) {
@@ -188,8 +196,16 @@ final class Layout
             echo '</div><div class="footer-bottom"><p>' . Site::footerText() . '</p><p><a href="' . self::e(Site::get('owner_url')) . '" target="_blank" rel="noopener">Made by ' . self::e(Site::get('owner_name')) . '</a></p></div></div></footer>';
             if (trim((string)Site::get('custom_footer_html')) !== '') { echo (string)Site::get('custom_footer_html'); }
             if (Site::on('cookie_banner_on')) {
-                echo '<div class="cookie-banner" id="cookie-banner" hidden><p>' . self::e(Site::get('cookie_banner_text')) . ' <a href="/cookie-policy">Learn more</a></p><button type="button" class="btn btn-primary btn-sm" id="cookie-ok">Got it</button></div>';
+                if (Kit::cfg('consent_banner', '') !== '') {
+                    // two-choice consent banner (services that load ads or other third-party scripts); the service's own JS reads data-consent
+                    echo '<div class="cookie-banner" id="cookie-banner" data-consent-banner role="dialog" aria-live="polite" aria-label="Cookie preferences" hidden><p>' . self::e((string)Kit::cfg('consent_banner')) . ' <a href="/cookie-policy">Cookie Policy</a></p>'
+                        . '<div class="cookie-actions"><button type="button" class="btn btn-secondary btn-sm" data-consent="rejected">Essential only</button><button type="button" class="btn btn-primary btn-sm" data-consent="accepted">Accept all</button></div></div>';
+                } else {
+                    echo '<div class="cookie-banner" id="cookie-banner" hidden><p>' . self::e(Site::get('cookie_banner_text')) . ' <a href="/cookie-policy">Learn more</a></p><button type="button" class="btn btn-primary btn-sm" id="cookie-ok">Got it</button></div>';
+                }
             }
+            $fx = Kit::cfg('foot_extra', null);
+            if (is_callable($fx)) { echo (string)$fx(); }
         } else {
             echo '<footer class="admin-foot"><p>' . $site . ' admin &middot; TZL Kit v' . Kit::VERSION . '</p></footer>';
         }
