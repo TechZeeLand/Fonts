@@ -8,17 +8,6 @@ final class Admin
 {
     public const SUBSETS = ['latin', 'latin-ext', 'vietnamese', 'cyrillic', 'greek', 'hebrew', 'arabic', 'devanagari', 'bengali', 'thai', 'japanese'];
 
-    public static function guard(string $path): void
-    {
-        Auth::start();
-        if ($path === '/admin/login') { return; }
-        if (!Auth::check()) { App::redirect('/admin/login'); }
-        if (Auth::mustChange() && $path !== '/admin/account' && $path !== '/admin/logout') {
-            View::flash('info', 'Welcome! Please choose your own username and password before continuing.');
-            App::redirect('/admin/account');
-        }
-    }
-
     private static function back(string $to = '/admin'): void { App::redirect($to); }
 
     private static function str(string $key, int $max = 200): string
@@ -32,62 +21,6 @@ final class Admin
     {
         if ($v === '') { return ''; }
         return preg_match('#^https?://[^\s<>"]+$#i', $v) ? $v : null;
-    }
-
-    /* ---------- auth ---------- */
-
-    public static function loginForm(): void
-    {
-        if (Auth::check()) { App::redirect('/admin'); }
-        Auth::ensureAdmin();
-        View::render('admin/login', ['error' => '', 'firstRun' => is_file(Store::path('INITIAL_ADMIN_PASSWORD.txt'))]);
-    }
-
-    public static function loginPost(): void
-    {
-        Auth::verifyCsrf();
-        Auth::ensureAdmin();
-        if (Auth::locked()) {
-            http_response_code(429);
-            View::render('admin/login', ['error' => 'Too many failed attempts. Please wait 15 minutes and try again.', 'firstRun' => false]);
-            return;
-        }
-        if (Auth::attempt(trim((string)($_POST['username'] ?? '')), (string)($_POST['password'] ?? ''))) { App::redirect('/admin'); }
-        http_response_code(401);
-        View::render('admin/login', ['error' => 'Incorrect username or password.', 'firstRun' => is_file(Store::path('INITIAL_ADMIN_PASSWORD.txt'))]);
-    }
-
-    public static function logout(): void
-    {
-        Auth::verifyCsrf();
-        Auth::logout();
-        App::redirect('/admin/login');
-    }
-
-    /* ---------- dashboard ---------- */
-
-    public static function dashboard(): void
-    {
-        $days = Store::statDays(14);
-        $sum = ['css' => 0, 'file' => 0, 'zip' => 0, 'api' => 0];
-        foreach ($days as $d) { foreach ($sum as $k => $_) { $sum[$k] += $d[$k]; } }
-        $today = end($days);
-        $fonts = Store::fonts();
-        $pub = count(array_filter($fonts, static fn($f) => !empty($f['published'])));
-        $caps = FontKit::caps();
-        $checks = [
-            ['Data folder is writable', is_writable(App::$data), 'Make ' . App::$data . ' writable by the web server user.'],
-            ['Automatic WOFF2 conversion', $caps['fonttools'] && $caps['brotli'], 'Install python3 + fonttools + brotli (included in the Docker image). Without it, uploaded TTF/OTF files are served as they are.'],
-            ['ZIP downloads (php-zip)', class_exists('ZipArchive'), 'Enable the PHP zip extension to offer family downloads and backups.'],
-            ['Served over HTTPS', App::isHttps(), 'Put the service behind HTTPS. If a reverse proxy terminates TLS, set TZL_TRUST_PROXY=1.'],
-            ['Public URL is set', trim((string)Store::setting('base_url')) !== '' || App::env('TZL_BASE_URL') !== '', 'Set it in Settings so generated CSS and embed code always use the right domain.'],
-            ['Admin password was changed', !Auth::mustChange(), 'Change the generated password in Account.'],
-        ];
-        View::render('admin/dashboard', [
-            'days' => $days, 'sum' => $sum, 'today' => $today, 'top' => Store::topFonts(30, 8), 'fonts' => $fonts,
-            'pub' => $pub, 'totals' => Store::totalBytes(), 'checks' => $checks, 'recent' => Store::activity(8),
-            'ini' => ['upload' => ini_get('upload_max_filesize'), 'post' => ini_get('post_max_size')],
-        ]);
     }
 
     public static function fonts(): void { View::render('admin/fonts', ['fonts' => Store::fonts()]); }
@@ -248,79 +181,9 @@ final class Admin
         self::back($url);
     }
 
-    /* ---------- settings / account / activity ---------- */
-
-    public static function settings(): void { View::render('admin/settings', ['s' => Store::settings(), 'errors' => []]); }
-
-    public static function settingsSave(): void
-    {
-        Auth::verifyCsrf();
-        $errors = [];
-        $new = [];
-        $new['site_name'] = self::str('site_name', 60) ?: 'TechZeeLand Fonts';
-        $new['short_name'] = self::str('short_name', 30) ?: 'TZL Fonts';
-        $new['tagline'] = self::str('tagline', 160);
-        $bu = self::urlOrEmpty(rtrim(self::str('base_url', 200), '/'));
-        if ($bu === null) { $errors[] = 'Public URL must start with http:// or https://.'; } else { $new['base_url'] = $bu; }
-        $em = self::str('contact_email', 120);
-        if ($em !== '' && !filter_var($em, FILTER_VALIDATE_EMAIL)) { $errors[] = 'Contact email is not valid.'; } else { $new['contact_email'] = $em; }
-        $gh = self::urlOrEmpty(self::str('github_url', 200));
-        if ($gh === null) { $errors[] = 'GitHub URL must start with http:// or https://.'; } else { $new['github_url'] = $gh; }
-        $new['announcement_on'] = !empty($_POST['announcement_on']);
-        $new['announcement_text'] = self::str('announcement_text', 200);
-        $al = self::urlOrEmpty(self::str('announcement_link', 300));
-        if ($al === null) { $errors[] = 'Announcement link must start with http:// or https://.'; } else { $new['announcement_link'] = $al; }
-        $ttl = (int)($_POST['css_ttl'] ?? 0);
-        if ($ttl < 60 || $ttl > 31536000) { $errors[] = 'CSS cache time must be between 60 and 31,536,000 seconds.'; } else { $new['css_ttl'] = $ttl; }
-        $days = (int)($_POST['cache_days'] ?? 0);
-        if ($days < 1 || $days > 365) { $errors[] = 'Recommended refresh interval must be 1–365 days.'; } else { $new['cache_days'] = $days; }
-        $cors = self::str('cors_origin', 200);
-        if ($cors !== '*' && self::urlOrEmpty($cors) === null) { $errors[] = 'CORS origin must be * or a full origin such as https://example.com.'; } else { $new['cors_origin'] = $cors === '' ? '*' : $cors; }
-        $mu = (int)($_POST['max_upload_mb'] ?? 0);
-        if ($mu < 1 || $mu > 200) { $errors[] = 'Max upload size must be 1–200 MB.'; } else { $new['max_upload_mb'] = $mu; }
-        $dd = self::str('default_display', 12);
-        $new['default_display'] = in_array($dd, Css::DISPLAY, true) ? $dd : 'swap';
-        $new['stats_on'] = !empty($_POST['stats_on']);
-        $new['robots_index'] = !empty($_POST['robots_index']);
-        if ($errors) {
-            View::render('admin/settings', ['s' => array_merge(Store::settings(), $new), 'errors' => $errors]);
-            return;
-        }
-        Store::saveSettings($new);
-        Store::log('Settings updated');
-        View::flash('ok', 'Settings saved.');
-        self::back('/admin/settings');
-    }
-
-    public static function account(): void { View::render('admin/account', ['errors' => [], 'admin' => Auth::admin()]); }
-
-    public static function accountSave(): void
-    {
-        Auth::verifyCsrf();
-        $a = Auth::admin();
-        $errors = [];
-        $cur = (string)($_POST['current'] ?? '');
-        $user = self::str('username', 40);
-        $p1 = (string)($_POST['new_password'] ?? '');
-        $p2 = (string)($_POST['new_password2'] ?? '');
-        if (!$a || !password_verify($cur, (string)$a['hash'])) { $errors[] = 'Your current password is not correct.'; }
-        if (!preg_match('/^[A-Za-z0-9._-]{3,40}$/', $user)) { $errors[] = 'Username must be 3–40 characters: letters, numbers, dot, dash or underscore.'; }
-        if ($p1 !== '' || Auth::mustChange()) {
-            if (strlen($p1) < 10) { $errors[] = 'New password must be at least 10 characters.'; }
-            if ($p1 !== $p2) { $errors[] = 'New passwords do not match.'; }
-            if ($p1 === $cur && $p1 !== '') { $errors[] = 'Choose a password different from the current one.'; }
-        }
-        if ($errors) { View::render('admin/account', ['errors' => $errors, 'admin' => $a]); return; }
-        Auth::changeCredentials($user, $p1);
-        View::flash('ok', 'Account updated.');
-        self::back('/admin/account');
-    }
-
-    public static function activity(): void { View::render('admin/activity', ['rows' => Store::activity(150)]); }
-
     /* ---------- tools ---------- */
 
-    public static function tools(): void
+    public static function fontTools(): void
     {
         Auth::verifyCsrf();
         $do = (string)($_POST['do'] ?? '');
@@ -346,32 +209,80 @@ final class Admin
             Store::log('Cleared statistics');
             View::flash('ok', 'Statistics cleared.');
         }
-        self::back('/admin');
+        self::back('/admin/fonts');
     }
 
-    public static function backup(): void
+
+    /* ---------- delivery settings (font-service specific) ---------- */
+
+    public static function delivery(): void
     {
-        if (!class_exists('ZipArchive')) { View::flash('err', 'php-zip is not installed.'); self::back('/admin'); }
-        $tmp = tempnam(sys_get_temp_dir(), 'tzlbk');
-        $z = new \ZipArchive();
-        if ($tmp === false || $z->open($tmp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) { View::flash('err', 'Could not create the backup.'); self::back('/admin'); }
-        foreach (['fonts.json', 'settings.json', 'stats.json'] as $f) {
-            if (is_file(Store::path($f))) { $z->addFile(Store::path($f), 'tzl-fonts-data/' . $f); }
+        $s = Store::settings();
+        $h = '<form method="post" action="/admin/delivery" class="admin-form">' . \Tzl\Auth::field();
+        $h .= \Tzl\Ui::card('Caching & delivery', 'zap',
+            '<div class="field-row">'
+            . \Tzl\Ui::text('CSS cache time (seconds)', 'css_ttl', (string)(int)$s['css_ttl'], ['type' => 'number', 'min' => 60, 'max' => 31536000, 'hint' => 'How long browsers and proxies reuse <code>/css2</code> responses. 86400 = 1 day.'])
+            . \Tzl\Ui::text('Recommended refresh interval (days)', 'cache_days', (string)(int)$s['cache_days'], ['type' => 'number', 'min' => 1, 'max' => 365, 'hint' => 'Shown in the docs and used as the default of the PHP/Node helpers.']) . '</div>'
+            . '<div class="field-row">'
+            . \Tzl\Ui::select('Default font-display', 'default_display', array_combine(Css::DISPLAY, Css::DISPLAY), (string)$s['default_display'])
+            . \Tzl\Ui::text('Max upload size per file (MB)', 'max_upload_mb', (string)(int)$s['max_upload_mb'], ['type' => 'number', 'min' => 1, 'max' => 200, 'hint' => 'Also limited by PHP upload_max_filesize and post_max_size (see System).']) . '</div>');
+        $h .= '<div class="form-actions"><button class="btn btn-primary" type="submit">' . App::icon('save') . ' Save</button></div></form>';
+        \Tzl\Admin::page('Delivery & caching', 'delivery', $h);
+    }
+
+    public static function deliverySave(): void
+    {
+        Auth::verifyCsrf();
+        $int = static function (string $k, int $lo, int $hi, int $d): int {
+            $v = self::str($k, 10);
+            return max($lo, min($hi, is_numeric($v) ? (int)$v : $d));
+        };
+        $dd = self::str('default_display', 12);
+        Store::saveSettings([
+            'css_ttl' => $int('css_ttl', 60, 31536000, 86400), 'cache_days' => $int('cache_days', 1, 365, 7), 'max_upload_mb' => $int('max_upload_mb', 1, 200, 20),
+            'default_display' => in_array($dd, Css::DISPLAY, true) ? $dd : 'swap',
+        ]);
+        Store::log('Delivery settings updated');
+        View::flash('ok', 'Delivery settings saved.');
+        self::back('/admin/delivery');
+    }
+
+    /** Dashboard cards and widgets for the shared admin dashboard. */
+    public static function dashboardWidgets(array $days): array
+    {
+        $fonts = Store::fonts();
+        $pub = count(array_filter($fonts, static fn($f) => !empty($f['published'])));
+        $t = Store::totalBytes();
+        $today = (array)end($days);
+        $todayReq = (int)($today['ev']['css'] ?? 0) + (int)($today['ev']['file'] ?? 0);
+        $caps = FontKit::caps();
+        $rows = '';
+        foreach (Store::topFonts(30, 8) as $slug => $c) {
+            $rows .= '<li><a href="/admin/fonts/' . App::e($slug) . '">' . App::e($fonts[$slug]['family'] ?? $slug) . '</a><span>' . number_format($c) . '</span></li>';
         }
-        $root = Store::path('files');
-        if (is_dir($root)) {
-            $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
-            foreach ($it as $file) {
-                if ($file->isFile()) { $z->addFile($file->getPathname(), 'tzl-fonts-data/files/' . substr($file->getPathname(), strlen($root) + 1)); }
-            }
-        }
-        $z->close();
-        Store::log('Downloaded a backup');
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="tzl-fonts-backup-' . gmdate('Y-m-d') . '.zip"');
-        header('Content-Length: ' . filesize($tmp));
-        readfile($tmp);
-        @unlink($tmp);
-        exit;
+        $top = $rows !== '' ? '<ol class="rank">' . $rows . '</ol>' : '<p class="muted">No requests recorded yet.</p>';
+        $sum = ['css' => 0, 'file' => 0, 'zip' => 0, 'api' => 0];
+        foreach (Store::statDays(14) as $d) { foreach ($sum as $k => $_) { $sum[$k] += $d[$k]; } }
+        $tools = '<form method="post" action="/admin/fonts/tools" class="tool-forms">' . Auth::field()
+            . '<a class="btn btn-primary" href="/admin/fonts/new">' . App::icon('font-plus') . ' Add font</a>'
+            . '<button class="btn btn-secondary" name="do" value="rescan" type="submit">' . App::icon('refresh') . ' Rescan files &amp; bump manifest</button></form>'
+            . '<p class="hint">Rescan re-reads every file from disk and bumps the manifest version so cached copies pick up changes. Python fonttools/brotli (automatic WOFF2): <strong>' . ($caps['fonttools'] && $caps['brotli'] ? 'available' : 'missing') . '</strong>.</p>'
+            . '<p class="hint">Last 14 days: CSS ' . number_format($sum['css']) . ', font files ' . number_format($sum['file']) . ', ZIP downloads ' . number_format($sum['zip']) . ', API ' . number_format($sum['api']) . '.</p>';
+        return [
+            'cards' => [['font', $pub . ' / ' . count($fonts), 'fonts published'], ['hard-drive', App::bytes((int)$t['bytes']), $t['files'] . ' font files'], ['activity', number_format($todayReq), 'CSS + file requests today'], ['database-refresh', 'v' . Store::version(), 'manifest version']],
+            'html' => '<div class="admin-cols">' . \Tzl\Ui::card('Top fonts (30 days)', 'trophy', $top) . \Tzl\Ui::card('Font tools', 'wrench', $tools) . '</div>',
+        ];
+    }
+
+    public static function register(): void
+    {
+        \Tzl\Router::get('#^/admin/fonts$#', [self::class, 'fonts']);
+        \Tzl\Router::get('#^/admin/fonts/new$#', [self::class, 'fontNew']);
+        \Tzl\Router::post('#^/admin/fonts/new$#', [self::class, 'fontCreate']);
+        \Tzl\Router::post('#^/admin/fonts/tools$#', [self::class, 'fontTools']);
+        \Tzl\Router::get('#^/admin/fonts/([a-z0-9-]+)$#', [self::class, 'fontEdit']);
+        \Tzl\Router::post('#^/admin/fonts/([a-z0-9-]+)$#', [self::class, 'fontUpdate']);
+        \Tzl\Router::get('#^/admin/delivery$#', [self::class, 'delivery']);
+        \Tzl\Router::post('#^/admin/delivery$#', [self::class, 'deliverySave']);
     }
 }

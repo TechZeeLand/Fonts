@@ -5,12 +5,14 @@ services:
     ports: ["1027:80"]
     restart: unless-stopped
     environment:
+      # Root domain of all TechZeeLand services. Change it once when you move to a new domain.
+      TZL_ROOT_DOMAIN: "${TZL_ROOT_DOMAIN:-rayaz.org}"
       # Public URL of your instance (used in generated CSS and embed code). Can also be set in Admin > Settings.
-      TZL_BASE_URL: "${TZL_BASE_URL:-}"
+      TZL_BASE_URL: "${TZL_BASE_URL:-https://fonts.rayaz.org}"
       # Optional: choose the first admin account. If the password is empty a random one is printed in the log.
       TZL_ADMIN_USER: "${TZL_ADMIN_USER:-admin}"
       TZL_ADMIN_PASSWORD: "${TZL_ADMIN_PASSWORD:-}"
       # Set to 1 when a reverse proxy (Nginx, Caddy, Traefik, Cloudflare) terminates HTTPS in front of this container.
-      TZL_TRUST_PROXY: "${TZL_TRUST_PROXY:-0}"
+      TZL_TRUST_PROXY: "${TZL_TRUST_PROXY:-1}"
     volumes:
       - ./data:/var/www/html/data   # fonts, settings, stats: back this folder up

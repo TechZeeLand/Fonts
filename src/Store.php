@@ -1,29 +1,22 @@
 <?php
 namespace App;
 
+use Tzl\Json;
+use Tzl\Site;
+use Tzl\Stats;
+
 /**
- * Flat-file JSON storage (no database). Everything lives in the data directory:
- *   fonts.json, settings.json, admin.json, stats.json, activity.log, files/<slug>/*
+ * Font library storage (data/fonts.json + data/files/<slug>/*). Settings, stats and the activity log
+ * are provided by the TZL Kit; the methods below delegate so the font code stays unchanged.
  */
 final class Store
 {
+    /** Font-service specific settings (merged into the kit's Site defaults from public/index.php). */
     public const DEFAULTS = [
-        'site_name'         => 'TechZeeLand Fonts',
-        'short_name'        => 'TZL Fonts',
-        'tagline'           => 'Open-source fonts, served fast, cached on your server.',
-        'base_url'          => '',
-        'contact_email'     => 'azlanaziz@rayaz.org',
-        'github_url'        => 'https://github.com/TechZeeLand/TZL-Fonts',
-        'announcement_on'   => false,
-        'announcement_text' => '',
-        'announcement_link' => '',
-        'css_ttl'           => 86400,   // seconds browsers/proxies may reuse /css2 responses
-        'cache_days'        => 7,       // recommended refresh interval for self-hosted copies
-        'cors_origin'       => '*',
-        'stats_on'          => true,
-        'max_upload_mb'     => 20,
-        'default_display'   => 'swap',
-        'robots_index'      => true,
+        'css_ttl'         => 86400,   // seconds browsers/proxies may reuse /css2 responses
+        'cache_days'      => 7,       // recommended refresh interval for self-hosted copies
+        'max_upload_mb'   => 20,
+        'default_display' => 'swap',
     ];
 
     /** Only licenses that allow free commercial use + redistribution are accepted. */
@@ -46,83 +39,18 @@ final class Store
     ];
 
     private static ?array $db = null;
-    private static ?array $settings = null;
 
-    /* ---------- low-level JSON ---------- */
+    /* ---------- kit delegates ---------- */
 
-    public static function path(string $rel = ''): string
-    {
-        return App::$data . ($rel !== '' ? '/' . ltrim($rel, '/') : '');
-    }
-
-    public static function read(string $rel, $default = null)
-    {
-        $f = self::path($rel);
-        if (!is_file($f)) { return $default; }
-        $fp = @fopen($f, 'rb');
-        if (!$fp) { return $default; }
-        flock($fp, LOCK_SH);
-        $raw = stream_get_contents($fp);
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        $d = json_decode((string)$raw, true);
-        return $d === null ? $default : $d;
-    }
-
-    public static function write(string $rel, $data): bool
-    {
-        $f = self::path($rel);
-        $dir = dirname($f);
-        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-        $tmp = $f . '.' . bin2hex(random_bytes(4)) . '.tmp';
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $ok = $json !== false && file_put_contents($tmp, $json, LOCK_EX) !== false;
-        if ($ok) { @chmod($tmp, 0664); $ok = rename($tmp, $f); }
-        if (!$ok) { @unlink($tmp); }
-        return $ok;
-    }
-
-    /** Atomic read-modify-write under an exclusive lock. $fn receives the current value, returns the new one. */
-    public static function update(string $rel, callable $fn, $default = [])
-    {
-        $dir = dirname(self::path($rel));
-        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-        $lock = fopen(self::path($rel) . '.lock', 'c');
-        if (!$lock) { throw new \RuntimeException('Cannot lock ' . $rel); }
-        flock($lock, LOCK_EX);
-        try {
-            $new = $fn(self::read($rel, $default));
-            self::write($rel, $new);
-            return $new;
-        } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
-        }
-    }
-
-    /* ---------- settings ---------- */
-
-    public static function settings(): array
-    {
-        if (self::$settings === null) {
-            $s = self::read('settings.json', []);
-            self::$settings = array_merge(self::DEFAULTS, is_array($s) ? $s : []);
-        }
-        return self::$settings;
-    }
-
-    public static function setting(string $key)
-    {
-        $s = self::settings();
-        return $s[$key] ?? (self::DEFAULTS[$key] ?? null);
-    }
-
-    public static function saveSettings(array $new): void
-    {
-        $merged = array_merge(self::settings(), $new);
-        self::write('settings.json', $merged);
-        self::$settings = $merged;
-    }
+    public static function path(string $rel = ''): string { return Json::path($rel); }
+    public static function read(string $rel, $default = null) { return Json::read($rel, $default); }
+    public static function write(string $rel, $data): bool { return Json::write($rel, $data); }
+    public static function update(string $rel, callable $fn, $default = []) { return Json::update($rel, $fn, $default); }
+    public static function settings(): array { return Site::all(); }
+    public static function setting(string $key) { return Site::get($key); }
+    public static function saveSettings(array $new): void { Site::save($new); }
+    public static function log(string $msg): void { Json::log($msg); }
+    public static function activity(int $n = 50): array { return Json::activity($n); }
 
     /* ---------- fonts ---------- */
 
@@ -223,73 +151,23 @@ final class Store
     /** Count a request. $slugs: one slug or a list of slugs the request touched. */
     public static function hit(string $kind, $slugs = null): void
     {
-        if (!self::setting('stats_on')) { return; }
-        $slugs = $slugs === null ? [] : (array)$slugs;
-        try {
-            self::update('stats.json', static function ($s) use ($kind, $slugs) {
-                if (!is_array($s)) { $s = []; }
-                $day = gmdate('Y-m-d');
-                $s['days'][$day][$kind] = (int)($s['days'][$day][$kind] ?? 0) + 1;
-                foreach ($slugs as $slug) {
-                    $s['days'][$day]['f'][$slug] = (int)($s['days'][$day]['f'][$slug] ?? 0) + 1;
-                }
-                if (count($s['days']) > 100) { ksort($s['days']); $s['days'] = array_slice($s['days'], -90, null, true); }
-                return $s;
-            }, ['days' => []]);
-        } catch (\Throwable $e) {
-            // statistics must never break a font request
-        }
+        Stats::event($kind);
+        foreach ($slugs === null ? [] : (array)$slugs as $slug) { Stats::event('font', (string)$slug); }
     }
 
     /** Totals per day for the last $n days (oldest first). */
     public static function statDays(int $n = 14): array
     {
-        $s = self::read('stats.json', ['days' => []]);
         $out = [];
-        for ($i = $n - 1; $i >= 0; $i--) {
-            $d = gmdate('Y-m-d', time() - $i * 86400);
-            $row = $s['days'][$d] ?? [];
-            $out[$d] = ['css' => (int)($row['css'] ?? 0), 'file' => (int)($row['file'] ?? 0), 'zip' => (int)($row['zip'] ?? 0), 'api' => (int)($row['api'] ?? 0)];
+        foreach (Stats::days($n) as $d => $r) {
+            $ev = (array)($r['ev'] ?? []);
+            $out[$d] = ['css' => (int)($ev['css'] ?? 0), 'file' => (int)($ev['file'] ?? 0), 'zip' => (int)($ev['zip'] ?? 0), 'api' => (int)($ev['api'] ?? 0)];
         }
         return $out;
     }
 
     public static function topFonts(int $days = 30, int $limit = 8): array
     {
-        $s = self::read('stats.json', ['days' => []]);
-        $min = gmdate('Y-m-d', time() - $days * 86400);
-        $tot = [];
-        foreach (($s['days'] ?? []) as $d => $row) {
-            if ($d < $min) { continue; }
-            foreach (($row['f'] ?? []) as $slug => $n) { $tot[$slug] = ($tot[$slug] ?? 0) + (int)$n; }
-        }
-        arsort($tot);
-        return array_slice($tot, 0, $limit, true);
-    }
-
-    /* ---------- activity log ---------- */
-
-    public static function log(string $msg): void
-    {
-        $f = self::path('activity.log');
-        $user = (session_status() === PHP_SESSION_ACTIVE) ? ($_SESSION['u'] ?? '-') : '-';
-        @file_put_contents($f, json_encode(['t' => App::now(), 'u' => $user, 'm' => $msg], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-        if (@filesize($f) > 200000) {
-            $lines = file($f, FILE_IGNORE_NEW_LINES) ?: [];
-            @file_put_contents($f, implode("\n", array_slice($lines, -300)) . "\n", LOCK_EX);
-        }
-    }
-
-    public static function activity(int $n = 50): array
-    {
-        $f = self::path('activity.log');
-        if (!is_file($f)) { return []; }
-        $lines = array_slice(file($f, FILE_IGNORE_NEW_LINES) ?: [], -$n);
-        $out = [];
-        foreach (array_reverse($lines) as $l) {
-            $d = json_decode($l, true);
-            if (is_array($d)) { $out[] = $d; }
-        }
-        return $out;
+        return Stats::topEventKeys(Stats::days($days), 'font', $limit);
     }
 }
