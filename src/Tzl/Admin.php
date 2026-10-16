@@ -609,6 +609,7 @@ final class Admin
     {
         $site = Json::read('site.json', []);
         unset($site['logo_path']);
+        foreach ((array)Kit::cfg('secret_keys', []) as $sk) { unset($site[$sk]); }   // never export secrets (e.g. OAuth client secret)
         header('Content-Type: application/json; charset=utf-8');
         header('Content-Disposition: attachment; filename="tzl-settings-' . Kit::cfg('service') . '-' . gmdate('Ymd') . '.json"');
         echo json_encode(['kit' => Kit::VERSION, 'service' => Kit::cfg('service'), 'exported' => Kit::now(), 'site' => $site, 'pages' => Json::read('pages.json', [])], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

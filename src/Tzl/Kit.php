@@ -8,7 +8,7 @@ namespace Tzl;
  */
 final class Kit
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     /** The four services. Subdomains stay the same when the root domain changes. */
     public const SERVICES = [

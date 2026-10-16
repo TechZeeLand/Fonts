@@ -5,6 +5,7 @@
  */
 require __DIR__ . '/../src/Tzl/Kit.php';
 require __DIR__ . '/../src/Store.php';
+require __DIR__ . '/../src/helpers.php'; // h() and ico() used by the views
 
 use Tzl\Kit;
 
