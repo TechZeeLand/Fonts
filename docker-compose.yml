@@ -2,7 +2,7 @@ services:
   tzl-fonts:
     build: .
     container_name: tzl-fonts
-    ports: ["1027:80"]
+    ports: ["1026:80"]
     restart: unless-stopped
     environment:
       # Root domain of all TechZeeLand services. Change it once when you move to a new domain.
